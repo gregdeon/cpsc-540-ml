@@ -18,3 +18,17 @@ trainError = mean(yhat .!= y)
 yhat = model.predict(Xtest)
 testError = mean(yhat .!= ytest)
 @printf("Test Error with %d-nearest neighbours: %.3f\n",k,testError)
+
+# Q2.3.3: fit GDA classifer
+include("gda.jl")
+gda_model = gda(X, y)
+
+# Evaluate training error
+yhat = gda_model.predict(X)
+trainError = mean(yhat .!= y)
+@printf("Train Error with GDA: %.3f\n", trainError)
+
+# Evaluate test error
+yhat = gda_model.predict(Xtest)
+testError = mean(yhat .!= ytest)
+@printf("Test Error with GDA: %.3f\n", testError)
