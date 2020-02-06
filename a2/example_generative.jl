@@ -32,3 +32,18 @@ trainError = mean(yhat .!= y)
 yhat = gda_model.predict(Xtest)
 testError = mean(yhat .!= ytest)
 @printf("Test Error with GDA: %.3f\n", testError)
+
+# Q2.3.4: fit TDA classifier
+include("tda.jl")
+tda_model = tda(X, y)
+
+# Evaluate training error
+yhat = tda_model.predict(X)
+trainError = mean(yhat .!= y)
+@printf("Train Error with TDA: %.3f\n", trainError)
+
+# Evaluate test error
+yhat = tda_model.predict(Xtest)
+testError = mean(yhat .!= ytest)
+@printf("Test Error with TDA: %.3f\n", testError)
+

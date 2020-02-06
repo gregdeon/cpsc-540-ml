@@ -40,3 +40,4 @@ z = model.pdf([xValues[:] yValues[:]])
 zValues = reshape(z,size(xValues))
 
 contour(xValues,yValues,zValues)
+savefig("plots/2-3-4-student-t-example.png")

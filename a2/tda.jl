@@ -1,7 +1,7 @@
 include("misc.jl") # Includes mode function and GenericModel typedef
-include("gaussianDensity.jl")
+include("studentT.jl")
 
-function gda(X,y)
+function tda(X,y)
   (n,d) = size(X)
   k = maximum(y)
 
@@ -11,7 +11,7 @@ function gda(X,y)
   for yi in 1:k
     i_class = (y .== yi)
     X_yi = X[i_class, :]
-    submodels[yi] = gaussianDensity(X_yi)
+    submodels[yi] = studentT(X_yi)
     theta[yi] = sum(i_class) / n
   end
 
