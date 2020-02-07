@@ -5,10 +5,11 @@ data = load("mixtureData.jld")
 X = data["X"]
 
 include("gaussianDensity.jl")
-model = gaussianDensity(X)
+#model = gaussianDensity(X)
+model = EM(X,3,500)
 
 # Plot data and densities (you can ignore the code below)
-plot(X[:,1],X[:,2],".")
+PyPlot.plot(X[:,1],X[:,2],".")
 
 increment = 100
 (xmin,xmax) = xlim()
@@ -25,4 +26,4 @@ z = model.pdf([xValues[:] yValues[:]])
 
 zValues = reshape(z,size(xValues))
 
-contour(xValues,yValues,zValues)
+PyPlot.contour(xValues,yValues,zValues)
