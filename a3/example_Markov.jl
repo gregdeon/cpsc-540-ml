@@ -56,7 +56,32 @@ end
 @show mode_states
 
 # Q1.1.4: find optimal decoding
-# TODO: implement Viterbi decoding
+function viterbiDecode(p1, pt, d)
+	M = zeros(d, k) # messages: state with max probability
+	S = zeros(Int64, d, k) # most likely previous state
+
+	# Base case: d = 1
+	M[1, :] = p1
+
+	# Message passing
+	for t in 2:d
+		for j in 1:k
+			pj = M[t-1, :] .* pt[:, j]
+			M[t, j] = maximum(pj)
+			S[t, j] = argmax(pj)
+		end
+	end
+
+	# Find most likely path
+	x = zeros(Int64, d)
+	x[d] = argmax(M[d, :])
+	for t in d-1:-1:1
+		x[t] = S[t+1, x[t+1]]
+	end
+	return x
+end
+@show viterbiDecode(p1, pt, 50)
+@show viterbiDecode(p1, pt, 100)
 
 # Q1.1.5: find conditional probabilities with rejection sampling
 num_samples = 10000
