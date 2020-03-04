@@ -80,6 +80,7 @@ function viterbiDecode(p1, pt, d)
 	end
 	return x
 end
+
 @show viterbiDecode(p1, pt, 50)
 @show viterbiDecode(p1, pt, 100)
 
@@ -100,3 +101,5 @@ end
 mc_distribution = mc_counts / num_accepted
 @show mc_distribution
 @show num_accepted
+
+
