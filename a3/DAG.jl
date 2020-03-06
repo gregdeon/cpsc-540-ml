@@ -1,30 +1,27 @@
 include("tabular.jl")
-# Load X and y variable
+# Load X and y dataset
 using JLD, PyPlot
 data = load("MNIST_images.jld")
 (X,Xtest) = (data["X"],data["Xtest"])
-#X = X[:,:,1:100]
 
 m = size(X,1)
-@show m
 n = size(X,3)
-@show n
 
-models = Array{SampleModel}(undef,m,m)
-for i in 15:m
+models = Array{SampleModel}(undef,m,m)  # empty array
+for i in 15:m                           # since half we already know
     for j in 1:m
-        i1 = max(i-2,1)
-        j1 = max(j-2,1)
-        d = (i-i1+1)*(j-j1+1)
-        Xsub = zeros(n,d)
+        rows_window = max(i-2,1)        # number of rows in the submatrx
+        columns_window = max(j-2,1)     # number of cols in the submatrix
+        t = (i-rows_window+1)*(j-columns_window+1) # number of entries
+        X_tile = zeros(n,t)
         k = 1
-        for ii in i1:i
-            for jj in j1:j
-                Xsub[:,k] = X[ii,jj,:]
+        for p in rows_window:i
+            for q in columns_window:j
+                X_tile[:,k] = X[p,q,:]      # select all the samples at this location
                 k +=1
             end
         end
-        models[i,j] = tabular(Xsub[:,1:d-1],Xsub[:,d])
+        models[i,j] = tabular(X_tile[:,1:t-1],X_tile[:,t])
     end
 end
 
@@ -42,19 +39,19 @@ for image in 1:4
     for i in 1:m
         for j in 1:m
             if isnan(I[i,j])
-                i1 = max(i-2,1)
-                j1 = max(j-2,1)
-                d = (i-i1+1)*(j-j1+1)
-                XtestSub = zeros(d)
+                rows_window = max(i-2,1)
+                columns_window = max(j-2,1)
+                t = (i-rows_window+1)*(j-columns_window+1)
+                XtestSub = zeros(t)
                 k =1
-                for ii in i1:i
-                    for jj in j1:j
-                        XtestSub[k] = I[ii,jj]
+                for p in rows_window:i
+                    for q in columns_window:j
+                        XtestSub[k] = I[p,q]
                         k+=1
                     end
                 end
                 #print(XtestSub)
-                I[i,j] = models[i,j].sample(XtestSub[1:d-1])
+                I[i,j] = models[i,j].sample(XtestSub[1:t-1])
             end
         end
     end

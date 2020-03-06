@@ -1,28 +1,25 @@
+
 include("logReg.jl")
-# Load X and y variable
+# Load X and y dataset
 using JLD, PyPlot
 data = load("MNIST_images.jld")
 (X,Xtest) = (data["X"],data["Xtest"])
-#X = X[:,:,1:100]
 m = size(X,1)
-@show m
 n = size(X,3)
-@show n
 
-models = Array{SampleModel}(undef,m,m)
-offset = 2
+models = Array{SampleModel}(undef,m,m)      # empty array
 for i in 1:m
     for j in 1:m
-        d = i*j
-        Xsub = zeros(n,d)
+        t = i*j                             # size of the region to consider
+        X_tile = zeros(n,t)
         k = 1
-        for ii in 1:i
-            for jj in 1:j
-                Xsub[:,k] = X[ii,jj,:]
+        for p in 1:i
+            for q in 1:j
+                X_tile[:,k] = X[p,q,:]        # select all the samples at this location
                 k+=1
             end
         end
-        models[i,j] = logReg(Xsub[:,1:d-1],Xsub[:,d])
+        models[i,j] = logReg(X_tile[:,1:t-1],X_tile[:,t])
     end
 end
 
@@ -41,16 +38,16 @@ for image in 1:4
     for i in 1:m
         for j in 1:m
             if isnan(I[i,j])
-                d = i*j
-                XtestSub = zeros(d)
+                t = i*j
+                XtestSub = zeros(t)
                 k = 1
-                for ii in 1:i
-                    for jj in 1:j
-                        XtestSub[k] = I[ii,jj]
+                for p in 1:i
+                    for q in 1:j
+                        XtestSub[k] = I[p,q]
                         k+=1
                     end
                 end
-                I[i,j] = models[i,j].sample(XtestSub[1:d-1])
+                I[i,j] = models[i,j].sample(XtestSub[1:t-1])
             end
         end
     end
