@@ -1,7 +1,8 @@
 import chess, chess.pgn, chess.svg, chess.engine
 import csv
 
-def extractFeatures(board):
+
+def extract_features(board):
     """
     Return a list of features about the board.
 
@@ -48,5 +49,5 @@ if __name__ == "__main__":
         rows = [row for row in reader]
 
     board = chess.Board(rows[6]['fen'])
-    features = extractFeatures(board)
+    features = extract_features(board)
     print(features)
