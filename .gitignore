@@ -274,3 +274,7 @@ TSWLatexianTemp*
 
 # Makeindex log files
 *.lpz
+
+# extra ignore added by shivam
+.ipynb_checkpoints
+project/stockfish/*
