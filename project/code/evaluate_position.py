@@ -13,6 +13,71 @@ import chess.engine
 
 ENGINE_PATH = '/usr/games/stockfish'
 
+STATIC_EVALUATION_KEYS = [
+    'material_total_midgame',
+    'material_total_endgame',
+    'imbalance_total_midgame',
+    'imbalance_total_endgame',
+    'pawns_total_midgame',
+    'pawns_total_endgame',
+    'knights_white_midgame',
+    'knights_white_endgame',
+    'knights_black_midgame',
+    'knights_black_endgame',
+    'knights_total_midgame',
+    'knights_total_endgame',
+    'bishop_white_midgame',
+    'bishop_white_endgame',
+    'bishop_black_midgame',
+    'bishop_black_endgame',
+    'bishop_total_midgame',
+    'bishop_total_endgame',
+    'rooks_white_midgame',
+    'rooks_white_endgame',
+    'rooks_black_midgame',
+    'rooks_black_endgame',
+    'rooks_total_midgame',
+    'rooks_total_endgame',
+    'queens_white_midgame',
+    'queens_white_endgame',
+    'queens_black_midgame',
+    'queens_black_endgame',
+    'queens_total_midgame',
+    'queens_total_endgame',
+    'mobility_white_midgame',
+    'mobility_white_endgame',
+    'mobility_black_midgame',
+    'mobility_black_endgame',
+    'mobility_total_midgame',
+    'mobility_total_endgame',
+    'king_safety_white_midgame',
+    'king_safety_white_endgame',
+    'king_safety_black_midgame',
+    'king_safety_black_endgame',
+    'king_safety_total_midgame',
+    'king_safety_total_endgame',
+    'threats_white_midgame',
+    'threats_white_endgame',
+    'threats_black_midgame',
+    'threats_black_endgame',
+    'threats_total_midgame',
+    'threats_total_endgame',
+    'passed_pawns_white_midgame',
+    'passed_pawns_white_endgame',
+    'passed_pawns_black_midgame',
+    'passed_pawns_black_endgame',
+    'passed_pawns_total_midgame',
+    'passed_pawns_total_endgame',
+    'space_white_midgame',
+    'space_white_endgame',
+    'space_black_midgame',
+    'space_black_endgame',
+    'space_total_midgame',
+    'space_total_endgame',
+    'total_total_midgame',
+    'total_total_endgame'
+]
+
 def load_engine(engine_path=ENGINE_PATH):
     """
     Run and connect to Stockfish locally.
@@ -66,8 +131,8 @@ def parse_static_evaluation(eval_strings):
     This function reads off each of the numbers in this table.
 
     :param eval_strings: list of strings -- one per line of eval output
-    :return: dict of evaluation outputs. Keys are (eval_term, color, phase) tuples, with values:
-        - eval_term: 'material', 'imbalance', ..., 'space', 'total'
+    :return: dict of evaluation outputs. Keys are strings 'term_color_phase', with values:
+        - term: 'material', 'imbalance', ..., 'space', 'total'
         - color: 'white', 'black', 'total'
         - phase: 'midgame', 'endgame'
     """
@@ -92,7 +157,8 @@ def parse_static_evaluation(eval_strings):
                     continue
                 else:
                     value = float(value_string)
-                    ret[(eval_term, eval_colors[i_color], eval_phases[i_phase])] = value
+                    key = '%s_%s_%s' % (eval_term, eval_colors[i_color], eval_phases[i_phase])
+                    ret[key] = value
     
     return ret
 
@@ -109,6 +175,14 @@ def get_static_evaluation(engine, board):
     engine.protocol._position(board)
     eval_strings = engine.communicate(EvalCommand)
     return parse_static_evaluation(eval_strings)
+
+def get_static_evaluation_keys():
+    """
+    Return a list of all possible keys for static evaluation.
+
+    :return: list of tuples 
+    """
+    return STATIC_EVALUATION_KEYS
 
 def get_raw_analysis(engine, board, analysis_limit):
     """
@@ -147,10 +221,10 @@ def get_analysis(engine, board, analysis_limit):
     :param engine: a SimpleEngine object, probably from load_engine()
     :param board: a python-chess Board object
     :param analysis_limit: a chess.engine.Limit object describing how deeply to read
-    :return: list of (first move, score)
+    :return: dict of {first_move: score}
     """
     info = get_raw_analysis(engine, board, analysis_limit)
-    return [(i['pv'][0], i['score']) for i in info]
+    return {i['pv'][0]: i['score'] for i in info}
 
 
 if __name__ == "__main__":
@@ -159,10 +233,11 @@ if __name__ == "__main__":
     engine = load_engine()
     
     static_evaluation = get_static_evaluation(engine, board)
-    print(static_evaluation[('material', 'total', 'midgame')])
-    print(static_evaluation[('total', 'total', 'midgame')])
+    print(static_evaluation.keys())
+    print(static_evaluation['material_total_midgame'])
+    print(static_evaluation['total_total_midgame'])
 
-    analysis = get_analysis(engine, board, chess.engine.Limit(depth=14))
+    analysis = get_analysis(engine, board, chess.engine.Limit(depth=10))
     print(analysis)
 
     engine.close()

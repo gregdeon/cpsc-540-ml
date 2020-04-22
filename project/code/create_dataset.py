@@ -8,6 +8,8 @@ import random
 
 import chess.pgn
 
+from evaluate_position import load_engine, get_static_evaluation_keys, get_static_evaluation, get_analysis
+
 DATASET_FIELDS = [
     # Unique IDs
     'game_id',
@@ -40,8 +42,6 @@ DATASET_FIELDS = [
     'prev_move_clock_used',                 # Number of seconds the opponent used on the previous move
     'prev_move_threat_on_undefended_piece', # True if the previous move threatened a hanging piece
 
-    # (TODO: stockfish static analysis features?)
-
     # Move features
     'move_uci',            # Notation
     'move_piece',          # One of {P, N, B, R, Q, K} 
@@ -52,7 +52,13 @@ DATASET_FIELDS = [
     'move_is_defended',    # True if this piece has a defender of any piece type
     'move_stockfish_eval', # TODO: Stockfish evaluation of this move
     'move_played',         # True if the human player chose this move
+] + [
+    # Static evaluation features
+    'stockfish_%s' % k for k in get_static_evaluation_keys()
 ]
+
+# For Stockfish evaluation: equivalent score in centipawns when evaluation gives "mate in N"
+MATE_CENTIPAWNS = 100*100 # 100 pawns
 
 def parseElo(header):
     white_elo = header['WhiteElo']
@@ -178,16 +184,21 @@ def isPreviousMoveThreat(game):
         return True
     return False
     
-def getMoveFeatures(board, move_played):
+def getMoveFeatures(board, move_played, engine, analysis_limit):
     """
     Return a list of objects describing features about every legal move.
 
     :param board: chess.Board object
     :param move: chess.Move object representing the move played in game
+    :param engine: chess.Engine object with Stockfish engine
     :return: list of objects with move features. same length as board.legal_moves
     """
-    ret = []
+
+    # Run analysis
+    analysis = get_analysis(engine, board, analysis_limit)
     
+    # Build list of moves
+    ret = []
     for move in board.legal_moves:
         from_square = move.from_square
         to_square = move.to_square
@@ -199,12 +210,12 @@ def getMoveFeatures(board, move_played):
             'move_is_capture': board.is_capture(move),
             'move_is_threatened': board.is_attacked_by(not board.turn, from_square),
             'move_is_defended': board.is_attacked_by(board.turn, from_square),
-            'move_stockfish_eval': 'TODO',
+            'move_stockfish_eval': analysis[move].pov(board.turn).score(mate_score=MATE_CENTIPAWNS),
             'move_played': (move_played.uci() == move.uci()) if move_played is not None else None, # true/false
         })
     return ret
 
-def parseGame(game):
+def parseGame(game, engine, analysis_limit):
     game_features = []
 
     # Game setting
@@ -278,7 +289,12 @@ def parseGame(game):
         
         # Get per-move features
         next_move = game.variations[0].move
-        features['move_features'] = getMoveFeatures(board, next_move)
+        features['move_features'] = getMoveFeatures(board, next_move, engine, analysis_limit)
+
+        # Get static evaluation features
+        static_eval = get_static_evaluation(engine, board)
+        for k in static_eval:
+            features['stockfish_%s' % k] = static_eval[k]
 
         game_features.append(features)
         
@@ -287,13 +303,14 @@ def parseGame(game):
         clock_used_previous = clock_used
     return game_features
 
-def parseDataset(pgn_fname, num_games, output_fname, report_every=1):
+def parseDataset(pgn_fname, num_games, output_fname, engine, analysis_limit, report_every=1):
     """
     Convert a PGN into an ML-ready CSV.
 
     :param pgn_fname: path to PGN with many games
     :param num_games: number of games to read from PGN
     :param output_fname: path of CSV file to write
+    :param engine: Stockfish engine object (from load_engine)
     """
 
     # Set up output file
@@ -307,7 +324,7 @@ def parseDataset(pgn_fname, num_games, output_fname, report_every=1):
             while game_num < num_games:
                 game = chess.pgn.read_game(f_in)
 
-                game_features_list = parseGame(game)
+                game_features_list = parseGame(game, engine, analysis_limit)
 
                 for game_features in game_features_list:
                     # Write separate row for each move
@@ -327,5 +344,13 @@ def parseDataset(pgn_fname, num_games, output_fname, report_every=1):
 
 
 if __name__ == "__main__":
-    parseDataset('../data/lichess_db_head.pgn', 30, '../data/sample_dataset.csv', report_every=5)
-
+    engine = load_engine()
+    parseDataset(
+        '../data/lichess_db_head.pgn', 
+        30, 
+        '../data/sample_dataset.csv', 
+        engine, 
+        chess.engine.Limit(depth=10),
+        report_every=5
+    )
+    engine.close()
