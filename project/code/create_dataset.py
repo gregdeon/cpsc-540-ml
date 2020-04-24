@@ -328,6 +328,7 @@ def parseDataset(pgn_fname, num_games, output_fname, engine, analysis_limit, rep
 
                 for game_features in game_features_list:
                     # Write separate row for each move
+                    # TODO: PyTorch code only needs game features once per board...
                     move_features_list = game_features['move_features']
                     del game_features['move_features']
                     for move_features in move_features_list:
