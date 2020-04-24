@@ -69,7 +69,7 @@ def get_dataloader(csv_path):
     TODO: add config?
     """
     dataset = ChessDataset(csv_path)
-    dataloader = DataLoader(chess_dataset, batch_size=1)
+    dataloader = DataLoader(dataset, batch_size=1)
     return dataloader
 
 
