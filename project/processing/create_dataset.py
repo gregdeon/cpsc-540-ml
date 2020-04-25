@@ -76,7 +76,15 @@ def parseElo(header):
     return {'white_elo': white_elo, 'black_elo': black_elo}
 
 def parseTimeControl(header):
+    """
+    Get the time control from a game header.
+
+    :param header: dict with game headers from PGN
+    :return: list of [initial time, increment], or None (for games with no time control)
+    """
     time_control = header['TimeControl']
+    if time_control == '-':
+        return None
     [game_time, move_time] = [int(s) for s in time_control.split('+')]
     return [game_time, move_time]
 
@@ -243,11 +251,16 @@ def parseGame(game, engine, analysis_limit):
 
     # Game setting
     players_elo = parseElo(game.headers)
-    [time_control_initial, time_control_increment] = parseTimeControl(game.headers)
+    time_control = parseTimeControl(game.headers)
+
+    # Filter out correspondence games
+    if time_control is None:
+        return []
 
     # Filter out fast games and low/high ELOs
     min_elo = min(int(players_elo['white_elo']), int(players_elo['black_elo']))
     max_elo = max(int(players_elo['white_elo']), int(players_elo['black_elo']))
+    [time_control_initial, time_control_increment] = time_control
     if time_control_initial < 180 or min_elo < 1300 or max_elo > 1800:
         return []
     
@@ -335,25 +348,40 @@ def parseGame(game, engine, analysis_limit):
         clock_used_previous = clock_used
     return game_features
 
-def parseDataset(pgn_fname, num_games, output_fname, engine, analysis_limit, report_every=1):
+def parseDataset(pgn_fname, output_fname, engine, analysis_limit, num_games, start_from=None, prev_board_num=0, report_every=1):
     """
     Convert a PGN into an ML-ready CSV.
 
     :param pgn_fname: path to PGN with many games
-    :param num_games: number of games to read from PGN
     :param output_fname: path of CSV file to write
     :param engine: Stockfish engine object (from load_engine)
+    :param analysis_limit: chess.engine.Limit object for analysis
+    :param num_games: number of games to read from PGN
+    :param start_from: for restarting, skip start_from games
+    :param prev_board_num: for restarting, last board number in previous CSV file
     """
 
     # Set up output file
-    with open(output_fname, 'w') as f_out:
+    file_mode = 'w' if start_from is None else 'a'
+    with open(output_fname, file_mode) as f_out:
         writer = csv.DictWriter(f_out, DATASET_FIELDS)
-        writer.writeheader()
 
+        if start_from is None:
+            writer.writeheader()
+
+        # Read games
         with open(pgn_fname, 'r') as f_in:
             game_num = 0
-            board_num = 0
+            board_num = prev_board_num+1
             num_filtered_games = 0
+
+            # Catch up if skipping games
+            if start_from is not None:
+                for i in range(start_from):
+                    chess.pgn.read_game(f_in)
+                game_num = start_from
+
+            # Parse games
             while game_num < num_games:
                 game = chess.pgn.read_game(f_in)
 
@@ -387,10 +415,12 @@ if __name__ == "__main__":
     engine = load_engine()
     parseDataset(
         '../data/lichess_db_head.pgn', 
-        1000, 
         '../data/dataset.csv', 
         engine, 
         chess.engine.Limit(depth=10),
+        1000, 
+        80,
+        2156,
         report_every=10
     )
     engine.close()

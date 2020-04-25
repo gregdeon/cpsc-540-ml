@@ -85,7 +85,7 @@ def collate_boards(batch):
 if __name__ == "__main__":
     # Sample code for loading and reading one individual board
     print('loading...')
-    chess_dataset = ChessDataset('../../data/sample_dataset_subset.csv', verbose=True)
+    chess_dataset = ChessDataset('../data/dataset_subset.csv', verbose=True)
     
     print('fetching...')
     (board, stockfish_eval, moves), label = chess_dataset[3]

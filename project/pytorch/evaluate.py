@@ -35,6 +35,11 @@ def log_likelihood(outputs, labels):
     log_p_class = [log_probabilities[i][0][labels[i]] for i in range(num_examples)]
     return sum(log_p_class).item()
 
+def nll(outputs, labels):
+    """
+    Compute the negative log-likelihood.
+    """
+    return -log_likelihood(outputs, labels)
 
 def evaluate(model, data_generator, metrics):
     """
@@ -45,7 +50,7 @@ def evaluate(model, data_generator, metrics):
     :param metrics: dict of {metric_name: function}, where each function accepts a list of logit outputs and a list of correct labels
     :return: dict of results from evaluating metrics
     """
-    
+
     # Put model into evaluate mode 
     model.eval()
 
@@ -67,7 +72,7 @@ def evaluate(model, data_generator, metrics):
 
 if __name__ == "__main__":
     print('Loading...')
-    data_generator = get_dataloader('../../data/sample_dataset.csv')
+    data_generator = get_dataloader('../data/sample_dataset.csv')
     # model = StockfishScoreModel()
     model = PreferBackwardMoves()
     metrics = {
