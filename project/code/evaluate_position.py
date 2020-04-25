@@ -78,22 +78,25 @@ STATIC_EVALUATION_KEYS = [
     'total_total_endgame'
 ]
 
-def load_engine(engine_path=ENGINE_PATH):
+def load_engine(threads=1, engine_path=ENGINE_PATH):
     """
     Run and connect to Stockfish locally.
 
+    :param threads: number of threads to use for analysis. TODO: doesn't seem to work.
     :param engine_path: path to a Stockfish engine executable
     :return: a SimpleEngine object
 
     Note: make sure you call .close() on this object when you're finished with it!
     """
-    return chess.engine.SimpleEngine.popen_uci(engine_path)
-
+    engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+    engine.protocol._setoption('Threads', threads)
+    return engine
 
 class EvalCommand(chess.engine.BaseCommand[chess.engine.UciProtocol, None]):
     """
     Helper class for sending static evaluation messages to Stockfish.
     """
+
     def start(self, engine) -> None:
         self.eval_strings = []
         engine.send_line("eval")
