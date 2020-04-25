@@ -40,7 +40,7 @@ class ChessDataset(Dataset):
         # Split rows into boards
         if verbose:
             print('Splitting into boards...')
-        dfs = [board_df.drop(columns=columns_drop) for (_, board_df) in df.groupby('id_board', as_index = False)]
+        dfs = [board_df.drop(columns=columns_drop).reset_index(drop=True) for (_, board_df) in df.groupby('id_board')]
         
         # Split each board into features
         if verbose:
@@ -67,6 +67,7 @@ def get_dataloader(csv_path):
     Set up a dataloader for a chess dataset.
 
     TODO: add config?
+    Might help to add shuffle=True...
     """
     dataset = ChessDataset(csv_path)
     dataloader = DataLoader(dataset, batch_size=1)
