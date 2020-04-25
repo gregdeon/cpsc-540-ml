@@ -15,38 +15,38 @@ import torch
 import torch.nn as nn
 
 class PreferBackwardMoves(nn.Module):
-	"""
-	Silly example model. Predicts that backward moves are more likely.
-	"""
-	def __init__(self):
-		super(PreferBackwardMoves, self).__init__()
+    """
+    Silly example model. Predicts that backward moves are more likely.
+    """
+    def __init__(self):
+        super(PreferBackwardMoves, self).__init__()
 
-	def forward(self, x):
-		(board, sf_eval, moves) = x
-		return -torch.FloatTensor(1.0*moves['move_dy'])
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+        return -torch.FloatTensor(1.0*moves['move_dy'])
 
 class StockfishScoreModel(nn.Module):
-	"""
-	Simple model only based on Stockfish analysis. 
-	
-	Single parameter s interpolates between playing randomly (s=0) and playing Stockfish's selected move (s = infty).
+    """
+    Simple model only based on Stockfish analysis. 
+    
+    Single parameter s interpolates between playing randomly (s=0) and playing Stockfish's selected move (s = infty).
 
-	Output is logit[move] = s * stockfish_eval[move].
-	"""
-	def __init__(self):
-		super(StockfishScoreModel, self).__init__()
-		self.scale = nn.Parameter(torch.tensor([1e-3]))
+    Output is logit[move] = s * stockfish_eval[move].
+    """
+    def __init__(self):
+        super(StockfishScoreModel, self).__init__()
+        self.scale = nn.Parameter(torch.tensor([1e-3]))
 
-	def forward(self, x):
-		(board, sf_eval, moves) = x
-		stockfish_scores = moves['move_stockfish_eval']	
-		logits = self.scale * stockfish_scores
-		return logits
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+        stockfish_scores = moves['move_stockfish_eval'] 
+        logits = self.scale * stockfish_scores
+        return logits
 
 
 if __name__ == "__main__":
     print('loading...')
-	from dataset import get_dataloader
+    from dataset import get_dataloader
     loader = get_dataloader('../../data/sample_dataset_subset.csv')
 
     (board, sf_eval, moves), label = next(iter(loader))
