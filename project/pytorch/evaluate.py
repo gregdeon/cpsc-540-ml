@@ -20,9 +20,10 @@ def accuracy(outputs, labels):
     num_examples = len(outputs)
 
     # Choose randomly among the most likely moves
-    predicted_labels = [np.random.choice(np.flatnonzero(output == output.max())) for output in outputs]
-
-    correct = [predicted_labels[i] == labels[i] for i in range(num_examples)]
+    # TODO: debug... num_predicted is summing over 0D tensor.
+    predicted_labels = [(output == output.max()).float().squeeze() for output in outputs]
+    num_predicted = [sum(predicted) for predicted in predicted_labels]
+    correct = [predicted_labels[i][labels[i]] / num_predicted[i] for i in range(num_examples)]
     return float(sum(correct)) / num_examples
 
 def log_likelihood(outputs, labels):
@@ -73,8 +74,8 @@ def evaluate(model, data_generator, metrics):
 if __name__ == "__main__":
     print('Loading...')
     data_generator = get_dataloader('../data/dataset_subset.csv')
-    # model = StockfishScoreModel()
-    model = PreferBackwardMoves()
+    model = StockfishScoreModel(1e-3)
+    # model = PreferBackwardMoves()
     metrics = {
         'accuracy': accuracy,
         'log_likelihood': log_likelihood,

@@ -33,9 +33,9 @@ class StockfishScoreModel(nn.Module):
 
     Output is logit[move] = s * stockfish_eval[move].
     """
-    def __init__(self):
+    def __init__(self, initial_scale=1e-3):
         super(StockfishScoreModel, self).__init__()
-        self.scale = nn.Parameter(torch.tensor([1e-3]))
+        self.scale = nn.Parameter(torch.tensor([initial_scale]))
 
     def forward(self, x):
         (board, sf_eval, moves) = x
@@ -45,7 +45,7 @@ class StockfishScoreModel(nn.Module):
 
 class LinearMovesModel(nn.Module):
     """
-
+    Linear model based on move features alone.
     """
     def __init__(self, num_features):
         super(LinearMovesModel, self).__init__()
@@ -76,6 +76,31 @@ class LinearMovesModel(nn.Module):
         logits = self.linear(inputs).squeeze(dim=2)
         return logits
 
+class NeuralNet(nn.Module):
+    """
+    Deeper neural net.
+
+    TODO: document...
+    """
+    def __init__(self, num_features_board, num_features_moves, hidden_units, activation):
+        super(NeuralNet, self).__init__()
+        self.linear_board = nn.Linear(num_features_board, hidden_units)
+        self.linear_moves = nn.Linear(num_features_moves, hidden_units)
+        self.linear_output = nn.Linear(hidden_units, 1)
+        self.activation = activation
+
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+
+        inputs_board = torch.stack([(board[feature].float()) for feature in board]).transpose(0, 1)
+        inputs_moves = torch.stack([(moves[feature].float()) for feature in moves]).transpose(0, 2).transpose(0, 1)
+
+        hidden = self.activation(self.linear_board(inputs_board) + self.linear_moves(inputs_moves))
+        logits = self.linear_output(hidden).squeeze(dim=2)
+        return logits
+
+
+
 if __name__ == "__main__":
     print('loading...')
     from dataset import get_dataloader
@@ -92,6 +117,10 @@ if __name__ == "__main__":
     # TODO: read number of move features from example datapoint
     model_3 = LinearMovesModel(16)
     print(model_3((board, sf_eval, moves)))
+
+    # TODO: same
+    model = NeuralNet(20, 16, 8, nn.ReLU())
+    print(model((board, sf_eval, moves)))
     # print(output)
     # print(torch.argmax(output))
     # print(label)
