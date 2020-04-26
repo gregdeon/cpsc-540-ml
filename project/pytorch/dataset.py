@@ -16,7 +16,7 @@ def get_feature_names(column_names):
     columns_drop = [c for c in column_names if c in ['id_game', 'id_board', 'board_fen', 'move_uci']]
     columns_board = [c for c in column_names if (c.startswith('game_') or c.startswith('board_') or c.startswith('prev_move_')) and c != 'board_fen']
     columns_stockfish = [c for c in column_names if c.startswith('stockfish_')]
-    columns_move = [c for c in column_names if c.startswith('move_') and c not in ['move_played', 'move_uci', 'move_piece']]
+    columns_move = [c for c in column_names if c.startswith('move_') and c not in ['move_uci', 'move_piece']]
     columns_label = ['move_played']
 
     return (columns_drop, columns_board, columns_stockfish, columns_move, columns_label)
@@ -37,22 +37,29 @@ class ChessDataset(Dataset):
         df = pd.read_csv(csv_file)
         (columns_drop, columns_board, columns_stockfish, columns_move, _) = get_feature_names(df.columns)
 
-        # Split rows into boards
-        if verbose:
-            print('Splitting into boards...')
-        dfs = [board_df.drop(columns=columns_drop).reset_index(drop=True) for (_, board_df) in df.groupby('id_board')]
-        
+        df_per_board = df.dropna()
+        grouped = df.groupby('id_board')
+
         # Split each board into features
         if verbose:
             print('Separating features...')
-        self.board_features = [df[columns_board].iloc[0].to_dict() for df in dfs]
-        self.stockfish_features = [df[columns_stockfish].iloc[0].to_dict() for df in dfs]
-        self.move_features = [df[columns_move].to_dict('list') for df in dfs]
-        self.correct_moves = [df['move_played'].idxmax() for df in dfs]
+            print('- Board features')
+        self.board_features = df_per_board[columns_board].to_dict('records')
 
-        # Convert move features to np arrays
-        for i in range(len(self.move_features)):
-            self.move_features[i] = {k: np.array(self.move_features[i][k]) for k in self.move_features[i]}
+        if verbose:
+            print('- Stockfish evaluation features')
+        self.stockfish_features = df_per_board[columns_stockfish].to_dict('records') 
+
+        if verbose:
+            print('- Per-move features')
+        # TODO: this is the new bottleneck. I don't know any nice ways to speed it up
+        self.move_features = grouped.apply(lambda x: {feature: np.array(x[feature].values) for feature in columns_move}).values
+
+        if verbose:
+            print('- Moves played')
+        self.correct_moves = [f['move_played'].argmax() for f in self.move_features]
+        for f in self.move_features:
+            del f['move_played']
 
     def __len__(self):
         return len(self.board_features)
@@ -85,7 +92,7 @@ def collate_boards(batch):
 if __name__ == "__main__":
     # Sample code for loading and reading one individual board
     print('loading...')
-    chess_dataset = ChessDataset('../data/dataset_subset.csv', verbose=True)
+    chess_dataset = ChessDataset('../data/dataset.csv', verbose=True)
     
     print('fetching...')
     (board, stockfish_eval, moves), label = chess_dataset[3]
@@ -94,8 +101,8 @@ if __name__ == "__main__":
     print(label)
 
     # Example of iterating through dataset
-    for (i, ((board, sf_eval, moves), label)) in enumerate(chess_dataset):
-        print(i, len(moves['move_stockfish_eval']), max(moves['move_stockfish_eval']))
+    # for (i, ((board, sf_eval, moves), label)) in enumerate(chess_dataset):
+    #     print(i, len(moves['move_stockfish_eval']), max(moves['move_stockfish_eval']))
 
     dl = DataLoader(chess_dataset, batch_size=1) #, collate_fn=collate_boards)
     (board, sf_eval, moves), label  = next(iter(dl))

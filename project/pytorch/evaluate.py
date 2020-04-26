@@ -72,7 +72,7 @@ def evaluate(model, data_generator, metrics):
 
 if __name__ == "__main__":
     print('Loading...')
-    data_generator = get_dataloader('../data/sample_dataset.csv')
+    data_generator = get_dataloader('../data/dataset_subset.csv')
     # model = StockfishScoreModel()
     model = PreferBackwardMoves()
     metrics = {
