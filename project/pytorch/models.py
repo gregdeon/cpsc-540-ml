@@ -18,12 +18,13 @@ class PreferBackwardMoves(nn.Module):
     """
     Silly example model. Predicts that backward moves are more likely.
     """
-    def __init__(self):
+    def __init__(self, move_dy_index=5):
         super(PreferBackwardMoves, self).__init__()
+        self.move_dy_index = move_dy_index
 
     def forward(self, x):
         (board, sf_eval, moves) = x
-        return -torch.FloatTensor(1.0*moves['move_dy'])
+        return -torch.FloatTensor(1.0*moves[:, self.move_dy_index])
 
 class StockfishScoreModel(nn.Module):
     """
@@ -33,13 +34,14 @@ class StockfishScoreModel(nn.Module):
 
     Output is logit[move] = s * stockfish_eval[move].
     """
-    def __init__(self, initial_scale=1e-3):
+    def __init__(self, initial_scale=1e-3, stockfish_score_idx=-1):
         super(StockfishScoreModel, self).__init__()
         self.scale = nn.Parameter(torch.tensor([initial_scale]))
+        self.stockfish_score_idx = stockfish_score_idx
 
     def forward(self, x):
         (board, sf_eval, moves) = x
-        stockfish_scores = moves['move_stockfish_eval'] 
+        stockfish_scores = moves[:, self.stockfish_score_idx] 
         logits = self.scale * stockfish_scores
         return logits
 
@@ -53,27 +55,9 @@ class LinearMovesModel(nn.Module):
 
     def forward(self, x):
         (board, sf_eval, moves) = x
-        # TODO: get move features automatically instead of by name
-        move_features = [
-            'move_from_x',
-            'move_from_y',         
-            'move_to_x',           
-            'move_to_y',           
-            'move_dx',              
-            'move_dy',              
-            'move_piece_pawn',      
-            'move_piece_knight',   
-            'move_piece_bishop',   
-            'move_piece_rook',     
-            'move_piece_queen',    
-            'move_piece_king',     
-            'move_is_capture',      
-            'move_is_threatened',   
-            'move_is_defended',     
-            'move_stockfish_eval',
-        ]
-        inputs = torch.stack([(moves[feature].float()) for feature in move_features]).transpose(0, 2).transpose(0, 1)
-        logits = self.linear(inputs).squeeze(dim=2)
+        # print(moves)
+        # inputs = moves
+        logits = self.linear(moves).squeeze(dim=1)
         return logits
 
 class NeuralNet(nn.Module):
@@ -92,34 +76,37 @@ class NeuralNet(nn.Module):
     def forward(self, x):
         (board, sf_eval, moves) = x
 
-        inputs_board = torch.stack([(board[feature].float()) for feature in board]).transpose(0, 1)
-        inputs_moves = torch.stack([(moves[feature].float()) for feature in moves]).transpose(0, 2).transpose(0, 1)
+        # inputs_board = board
+        # inputs_moves = torch.stack([(moves[feature].float()) for feature in moves]).transpose(0, 2).transpose(0, 1)
 
-        hidden = self.activation(self.linear_board(inputs_board) + self.linear_moves(inputs_moves))
-        logits = self.linear_output(hidden).squeeze(dim=2)
+        hidden = self.activation(self.linear_board(board) + self.linear_moves(moves))
+        logits = self.linear_output(hidden).squeeze(dim=1)
         return logits
 
 
 
 if __name__ == "__main__":
     print('loading...')
-    from dataset import get_dataloader
-    loader = get_dataloader('../data/dataset_subset.csv')
+    from dataset import ChessDataset
+    dataset = ChessDataset('../data/dataset_subset.csv')
+    feature_names = dataset.get_column_names()
 
-    (board, sf_eval, moves), label = next(iter(loader))
+    (board, sf_eval, moves), label = dataset[10]
 
-    model_1 = PreferBackwardMoves()
+    move_dy_index = feature_names['move'].index('move_dy')
+    model_1 = PreferBackwardMoves(move_dy_index)
     print(model_1((board, sf_eval, moves)))
 
+    stockfish_score_index = feature_names['move'].index('move_stockfish_eval')
     model_2 = StockfishScoreModel()
     output = model_2((board, sf_eval, moves))
 
-    # TODO: read number of move features from example datapoint
-    model_3 = LinearMovesModel(16)
+    num_move_features = len(feature_names['move'])
+    model_3 = LinearMovesModel(num_move_features)
     print(model_3((board, sf_eval, moves)))
 
-    # TODO: same
-    model = NeuralNet(20, 16, 8, nn.ReLU())
+    num_board_features = len(feature_names['board'])
+    model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
     print(model((board, sf_eval, moves)))
     # print(output)
     # print(torch.argmax(output))

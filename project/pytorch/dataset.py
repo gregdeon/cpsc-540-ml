@@ -44,22 +44,27 @@ class ChessDataset(Dataset):
         if verbose:
             print('Separating features...')
             print('- Board features')
-        self.board_features = df_per_board[columns_board].to_dict('records')
+        self.board_features = torch.Tensor(df_per_board[columns_board].values)
+        self.board_feature_names = columns_board
 
         if verbose:
             print('- Stockfish evaluation features')
-        self.stockfish_features = df_per_board[columns_stockfish].to_dict('records') 
+        self.stockfish_features = torch.Tensor(df_per_board[columns_stockfish].values) 
+        self.stockfish_feature_names = columns_stockfish
 
         if verbose:
             print('- Per-move features')
         # TODO: this is the new bottleneck. I don't know any nice ways to speed it up
-        self.move_features = grouped.apply(lambda x: {feature: np.array(x[feature].values) for feature in columns_move}).values
+        self.move_features = grouped.apply(lambda x: torch.Tensor(x[columns_move].values)).values
 
         if verbose:
             print('- Moves played')
-        self.correct_moves = [f['move_played'].argmax() for f in self.move_features]
-        for f in self.move_features:
-            del f['move_played']
+        # Extract label ('move_played') and remove from move features
+        # TODO: this assumes that 'move_played' is in the last column
+        self.correct_moves = [f[:, -1].argmax() for f in self.move_features]
+        for i in range(len(self.move_features)):
+            self.move_features[i] = self.move_features[i][:, :-1]
+        self.move_feature_names = columns_move[:-1]
 
     def __len__(self):
         return len(self.board_features)
@@ -68,6 +73,16 @@ class ChessDataset(Dataset):
         x = (self.board_features[idx], self.stockfish_features[idx], self.move_features[idx])
         y = self.correct_moves[idx] 
         return (x, y)
+
+    def get_column_names(self):
+        """
+        Return a dict of column names for each of the feature tensors
+        """
+        return {
+            'board': self.board_feature_names,
+            'stockfish': self.stockfish_feature_names,
+            'move': self.move_feature_names,
+        }
 
 def get_dataloader(csv_path):
     """
@@ -92,20 +107,34 @@ def collate_boards(batch):
 if __name__ == "__main__":
     # Sample code for loading and reading one individual board
     print('loading...')
-    chess_dataset = ChessDataset('../data/dataset.csv', verbose=True)
+    chess_dataset = ChessDataset('../data/dataset_subset.csv', verbose=True)
     
     print('fetching...')
-    (board, stockfish_eval, moves), label = chess_dataset[3]
+    (board, stockfish_eval, moves), label = chess_dataset[0]
     print(board)
+    print(stockfish_eval)
     print(moves)
     print(label)
+    (board, stockfish_eval, moves), label = chess_dataset[2]
+    print(board)
 
     # Example of iterating through dataset
     # for (i, ((board, sf_eval, moves), label)) in enumerate(chess_dataset):
     #     print(i, len(moves['move_stockfish_eval']), max(moves['move_stockfish_eval']))
 
-    dl = DataLoader(chess_dataset, batch_size=1) #, collate_fn=collate_boards)
-    (board, sf_eval, moves), label  = next(iter(dl))
-    print(board)
-    print(moves)
-    print(label)
+    # dl = DataLoader(chess_dataset, batch_size=1) #, collate_fn=collate_boards)
+    # (board, sf_eval, moves), label  = next(iter(dl))
+    # print(board)
+    # print(moves)
+    # print(label)
+
+    print('Iterating through dataset...')
+    for ((board, sf_eval, moves), label) in chess_dataset:
+        pass
+
+    print('Columns:')
+    print(chess_dataset.get_column_names())
+
+    # print('Iterating through dataloader...')
+    # for ((board, sf_eval, moves), label) in dl:
+    #     pass

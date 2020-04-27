@@ -8,6 +8,7 @@ from models import PreferBackwardMoves, StockfishScoreModel
 from dataset import get_dataloader
 
 import numpy as np
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -20,8 +21,7 @@ def accuracy(outputs, labels):
     num_examples = len(outputs)
 
     # Choose randomly among the most likely moves
-    # TODO: debug... num_predicted is summing over 0D tensor.
-    predicted_labels = [(output == output.max()).float().squeeze() for output in outputs]
+    predicted_labels = [(output == output.max()).float() for output in outputs]
     num_predicted = [sum(predicted) for predicted in predicted_labels]
     correct = [predicted_labels[i][labels[i]] / num_predicted[i] for i in range(num_examples)]
     return float(sum(correct)) / num_examples
@@ -31,9 +31,9 @@ def log_likelihood(outputs, labels):
     Compute the log-likelihood (cross entropy) of the data, given the model.
     """
     num_examples = len(outputs)
-    log_softmax = nn.LogSoftmax(dim=1)
+    log_softmax = nn.LogSoftmax(dim=0)
     log_probabilities = [log_softmax(output) for output in outputs]
-    log_p_class = [log_probabilities[i][0][labels[i]] for i in range(num_examples)]
+    log_p_class = [log_probabilities[i][labels[i]] for i in range(num_examples)]
     return sum(log_p_class).item()
 
 def nll(outputs, labels):
@@ -42,7 +42,7 @@ def nll(outputs, labels):
     """
     return -log_likelihood(outputs, labels)
 
-def evaluate(model, data_generator, metrics):
+def evaluate(model, dataset, metrics):
     """
     Evaluate models on dataset and summarize with a number of metrics
 
@@ -59,11 +59,11 @@ def evaluate(model, data_generator, metrics):
     outputs = []
     labels = []
     with torch.no_grad():
+        for inputs, label in tqdm(dataset):
         # TODO: this is hardcoded for batch size of 1...
-        for batch_inputs, batch_labels in data_generator:
-            batch_outputs = model(batch_inputs)
-            outputs.append(batch_outputs)
-            labels.append(batch_labels)
+            output = model(inputs)
+            outputs.append(output)
+            labels.append(label)
 
     # Summarize with metrics
     results = {metric: metrics[metric](outputs, labels) for metric in metrics}
@@ -73,8 +73,11 @@ def evaluate(model, data_generator, metrics):
 
 if __name__ == "__main__":
     print('Loading...')
-    data_generator = get_dataloader('../data/dataset_subset.csv')
-    model = StockfishScoreModel(1e-3)
+    from dataset import ChessDataset
+    dataset = ChessDataset('../data/val.csv')
+    feature_names = dataset.get_column_names()
+
+    model = StockfishScoreModel()
     # model = PreferBackwardMoves()
     metrics = {
         'accuracy': accuracy,
@@ -82,5 +85,5 @@ if __name__ == "__main__":
     }
     
     print('Evaluating...')
-    results = evaluate(model, data_generator, metrics)
+    results = evaluate(model, dataset, metrics)
     print(results)

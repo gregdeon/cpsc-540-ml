@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
  
-from dataset import get_dataloader
+from dataset import ChessDataset
 from models import StockfishScoreModel, LinearMovesModel, NeuralNet
 from evaluate import evaluate, accuracy, nll
 
@@ -42,12 +42,9 @@ def load_checkpoint(path, model, optimizer):
     optimizer.load_state_dict(checkpoint['optimizer_state'])
     return checkpoint['best_loss']
 
-def train_epoch(model, loss_fn, optimizer, data):
+def train_epoch(model, loss_fn, optimizer, data, batch_size):
     """
     Train for a single epoch (pass through the entire training set).
-
-    Note: can only use a batch size of 1 -- updates model weights after every example.
-    TODO: add config for batch size, etc...
 
     :return: total loss across all training examples during the epoch
     """
@@ -57,21 +54,26 @@ def train_epoch(model, loss_fn, optimizer, data):
 
     loss_total = 0
 
+    # TODO: shuffle data
     # Loop through an entire epoch
-    for batch_inputs, batch_labels in tqdm(data, total=len(data)):
-        # Forward pass
-        batch_outputs = model(batch_inputs)
-        loss = loss_fn(batch_outputs, batch_labels)
-        loss_total += loss
+    num_examples = len(data)
+    for idx_start_batch in tqdm(range(0, num_examples, batch_size)):
+        batch_loss = 0
+        for i in range(idx_start_batch, min(idx_start_batch + batch_size, num_examples)):
+            inputs, label = data[i]
+            output = model(inputs)
+            batch_loss += loss_fn(output.unsqueeze(dim=0), label.unsqueeze(dim=0))
 
         # Update model
         optimizer.zero_grad()
-        loss.backward()
+        batch_loss.backward()
         optimizer.step()
+
+        loss_total += batch_loss
 
     return loss_total
 
-def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, model_dir, restore_file=None):
+def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, batch_size, model_dir, restore_file=None):
     """
     Train for many epochs, evaluating and saving models along the way
 
@@ -81,11 +83,9 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, mo
     :param train_data: generator for training data
     :param validation_data: generator for validation data
     :param num_epochs: number of passes to perform through the training data. TODO: put into params bbject?
+    :param batch_size: number of datapoints to consider for each optimizer step
     :param model_dir: path for saving intermediate models and checkpoints
     :param restore_file: optional file to restore training from
-
-    TODO: add parameter like
-    :param batch_size: number of datapoints to consider for each optimizer step
     """
     
     best_validation_loss = np.inf
@@ -102,7 +102,7 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, mo
 
         # Train for one epoch
         print('Training...')
-        training_loss = train_epoch(model, loss_fn, optimizer, train_data)
+        training_loss = train_epoch(model, loss_fn, optimizer, train_data, batch_size)
         print('Training loss: %.4f' % training_loss)
         print()
 
@@ -110,7 +110,7 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, mo
         print('Validating...')
         validation_metrics = {
             'loss': nll,
-            # 'accuracy': accuracy,
+            'accuracy': accuracy,
         }
         validation_results = evaluate(model, validation_data, validation_metrics)
         for metric in validation_results:
@@ -124,6 +124,7 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, mo
         validation_loss = validation_results['loss']
         if validation_loss < best_validation_loss:
             print('Record validation loss: %.4f (beats %.4f)' % (validation_loss, best_validation_loss))
+            print()
             best_validation_loss = validation_loss
             torch.save(model.state_dict(), os.path.join(model_dir, 'best.pt'))
 
@@ -132,29 +133,43 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, mo
 
 
 if __name__ == "__main__":
-    # TODO: don't hard-code locations of datasets
-    # TODO: shuffle training data in loader?
-    print('Loading training data...')
-    train_generator = get_dataloader('../data/train.csv')
-    # train_generator = get_dataloader('../data/dataset_subset.csv')
-    
-    print('Loading validation data...')
-    validation_generator = get_dataloader('../data/val.csv')
-    # validation_generator = get_dataloader('../data/dataset_subset.csv')
-
-    print('Setting up models...')
-    # model = LinearMovesModel(16)
-    # model = StockfishScoreModel()
-    model = NeuralNet(20, 16, 8, nn.ReLU())
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
-
     # TODO: add command line interface for these
-    num_epochs = 200
-    batch_size = 1
+    training_data_path = '../data/train.csv'
+    # training_data_path = '../data/dataset_subset.csv'
+    validation_data_path = '../data/val.csv'
+    # validation_data_path = '../data/dataset_subset.csv'
+    num_epochs = 5
+    batch_size = 16
     start_from_checkpoint = None
     # start_from_checkpoint = 'checkpoint-8.pt'
-    train(model, loss_fn, optimizer, train_generator, validation_generator, num_epochs, 'models/nn', start_from_checkpoint)
+
+    print('Loading training data...')
+    train_data = ChessDataset(training_data_path)
+    feature_names = train_data.get_column_names()
+    
+    print('Loading validation data...')
+    validation_data = ChessDataset(validation_data_path)
+
+    print('Setting up models...')
+    num_board_features = len(feature_names['board'])
+    num_move_features = len(feature_names['move'])
+    # model = StockfishScore
+    # model = LinearMovesModel(num_move_features)
+    model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=3e-4)
+
+    train(
+        model, 
+        loss_fn, 
+        optimizer, 
+        train_data, 
+        validation_data, 
+        num_epochs, 
+        batch_size, 
+        'models/test', 
+        start_from_checkpoint
+    )
 
 
 # TODO: add command line interface
