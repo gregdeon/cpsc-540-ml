@@ -5,7 +5,6 @@ TODO: make command line interface.
 """
 
 from models import PreferBackwardMoves, StockfishScoreModel
-from dataset import get_dataloader
 
 import numpy as np
 from tqdm import tqdm
@@ -59,8 +58,7 @@ def evaluate(model, dataset, metrics):
     outputs = []
     labels = []
     with torch.no_grad():
-        for inputs, label in tqdm(dataset):
-        # TODO: this is hardcoded for batch size of 1...
+        for inputs, label in tqdm(dataset, desc='Examples'):
             output = model(inputs)
             outputs.append(output)
             labels.append(label)

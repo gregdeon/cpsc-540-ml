@@ -23,24 +23,27 @@ def save_dict_to_json(d, json_path):
         d = {k: float(v) for k, v in d.items()}
         json.dump(d, f, indent=4)
 
-def save_checkpoint(path, model, optimizer, best_loss):
+def save_checkpoint(path, model, optimizer, best_loss, epochs):
     """
     Save the current training state in a checkpoint file
     """
     torch.save({
         'model_state': model.state_dict(),
         'optimizer_state': optimizer.state_dict(),
-        'best_loss': best_loss
+        'best_loss': best_loss,
+        'epochs': epochs,
     }, path)
 
 def load_checkpoint(path, model, optimizer):
     """
     Load a previous checkpoint into the model and optimizer
+
+    :return: tuple of (best validation loss, epochs completed)
     """
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state'])
     optimizer.load_state_dict(checkpoint['optimizer_state'])
-    return checkpoint['best_loss']
+    return (checkpoint['best_loss'], checkpoint['epochs'])
 
 def train_epoch(model, loss_fn, optimizer, data, batch_size):
     """
@@ -52,14 +55,16 @@ def train_epoch(model, loss_fn, optimizer, data, batch_size):
     # Set model to training mode
     model.train()
 
-    loss_total = 0
-
-    # TODO: shuffle data
-    # Loop through an entire epoch
+    # Shuffle data
     num_examples = len(data)
-    for idx_start_batch in tqdm(range(0, num_examples, batch_size)):
+    permutation = torch.randperm(num_examples)
+
+    # Loop through an entire epoch
+    loss_total = 0
+    for idx_start_batch in tqdm(range(0, num_examples, batch_size), desc='Batches'):
         batch_loss = 0
-        for i in range(idx_start_batch, min(idx_start_batch + batch_size, num_examples)):
+        batch_indices = permutation[idx_start_batch : min(idx_start_batch + batch_size, num_examples)]
+        for i in batch_indices:
             inputs, label = data[i]
             output = model(inputs)
             batch_loss += loss_fn(output.unsqueeze(dim=0), label.unsqueeze(dim=0))
@@ -73,7 +78,7 @@ def train_epoch(model, loss_fn, optimizer, data, batch_size):
 
     return loss_total
 
-def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, batch_size, model_dir, restore_file=None):
+def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, batch_size, model_dir, restore_checkpoint=None):
     """
     Train for many epochs, evaluating and saving models along the way
 
@@ -85,19 +90,26 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
     :param num_epochs: number of passes to perform through the training data. TODO: put into params bbject?
     :param batch_size: number of datapoints to consider for each optimizer step
     :param model_dir: path for saving intermediate models and checkpoints
-    :param restore_file: optional file to restore training from
+    :param restore_checkpoint: optional file to restore training from
     """
     
+    # Make model directory if it doesn't already exist
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+
     best_validation_loss = np.inf
     
     # Restart from existing checkpoint, if provided
-    if restore_file is not None:
-        restore_path = os.path.join(model_dir, restore_file)
-        print("Restoring parameters from %s" % (restore_path))
-        best_validation_loss = load_checkpoint(restore_path, model, optimizer)
+    if restore_checkpoint is not None:
+        restore_path = os.path.join(model_dir, 'checkpoint-%d.pt' % restore_checkpoint)
+        print("Restoring parameters from %s..." % (restore_path))
+        best_validation_loss, epoch = load_checkpoint(restore_path, model, optimizer)
+
+    else:
+        epoch = 0
 
     # Train
-    for epoch in range(num_epochs):
+    while epoch < num_epochs:
         print('Starting epoch %d/%d' % (epoch+1, num_epochs))
 
         # Train for one epoch
@@ -129,35 +141,70 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
             torch.save(model.state_dict(), os.path.join(model_dir, 'best.pt'))
 
         # Save checkpoint
-        save_checkpoint(os.path.join(model_dir, 'checkpoint-%d.pt' % (epoch+1)), model, optimizer, best_validation_loss )
+        save_checkpoint(os.path.join(model_dir, 'checkpoint-%d.pt' % (epoch+1)), model, optimizer, best_validation_loss, epoch+1)
 
+        epoch += 1
+
+
+def build_model(model_type, feature_names):
+    """
+    Create a model object.
+    """
+
+    # TODO: build model of model_type
+    num_board_features = len(feature_names['board'])
+    num_move_features  = len(feature_names['move'])
+
+    if model_type == 'random':
+        model = 'TODO'
+
+    elif model_type == 'stockfish_score':
+        stockfish_score_index = feature_names['move'].index('move_stockfish_eval')
+        model = StockfishScoreModel(stockfish_score_idx=stockfish_score_index)
+
+    elif model_type == 'linear_moves':
+        model = LinearMovesModel(num_move_features)
+
+    elif model_type == 'nn_board':
+        # TODO: read hidden layer size from 
+        model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
+
+    return model
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--train_data',                default='../data/train.csv', help='(string) Path to training set CSV')
+parser.add_argument('--validation_data',           default='../data/val.csv',   help='(string) Path to validation set CSV')
+parser.add_argument('--load_cached',   action='store_true',                     help='Load cached versions of the training and validation')
+parser.add_argument('--model_type',                                             help='(string) Name of model to train')
+parser.add_argument('--model_dir',                 default='models/test',       help='(string) Path to store models and checkpoints')
+parser.add_argument('--epochs',        type=int,   default=10,                  help='(int) Number of passes to make through the training set')
+parser.add_argument('--batch_size',    type=int,   default=16,                  help='(int) Number of examples to evaluate for each optimizer step')
+parser.add_argument('--learning_rate', type=float, default=1e-4,                help='(float) Optimizer learning rate')
+parser.add_argument('--checkpoint',    type=int,   default=None,                help='(int) Checkpoint number to restart training from')
 
 if __name__ == "__main__":
-    # TODO: add command line interface for these
-    training_data_path = '../data/train.csv'
-    # training_data_path = '../data/dataset_subset.csv'
-    validation_data_path = '../data/val.csv'
-    # validation_data_path = '../data/dataset_subset.csv'
-    num_epochs = 5
-    batch_size = 16
-    start_from_checkpoint = None
-    # start_from_checkpoint = 'checkpoint-8.pt'
+    args = parser.parse_args()
 
-    print('Loading training data...')
-    train_data = ChessDataset(training_data_path)
-    feature_names = train_data.get_column_names()
+    print('Loading data...')
+    print('- Training...')
+    if args.load_cached:
+        train_data = torch.load('../data/train_cached.pt')
+    else:
+        train_data = ChessDataset(args.train_data)
     
-    print('Loading validation data...')
-    validation_data = ChessDataset(validation_data_path)
+    print('- Validation...')
+    if args.load_cached:
+        validation_data = torch.load('../data/val_cached.pt')
+    else:
+        validation_data = ChessDataset(args.validation_data)
 
-    print('Setting up models...')
-    num_board_features = len(feature_names['board'])
-    num_move_features = len(feature_names['move'])
-    # model = StockfishScore
-    # model = LinearMovesModel(num_move_features)
-    model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
+    print('Setting up models...')    
+    feature_names = train_data.get_column_names()
+    model = build_model(args.model_type, feature_names)
+    model_dir = 'models/%s' % args.model_type
+
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=3e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
 
     train(
         model, 
@@ -165,16 +212,8 @@ if __name__ == "__main__":
         optimizer, 
         train_data, 
         validation_data, 
-        num_epochs, 
-        batch_size, 
-        'models/test', 
-        start_from_checkpoint
+        args.epochs, 
+        args.batch_size, 
+        model_dir, 
+        args.checkpoint,
     )
-
-
-# TODO: add command line interface
-# parser = argparse.ArgumentParser()
-# parser.add_argument('--data_path', default='../../data/sample_dataset.csv',
-#                     help="Path to dataset CSV")
-# args = parser.parse_args()
-# print(args.data_path)

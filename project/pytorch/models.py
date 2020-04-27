@@ -55,8 +55,6 @@ class LinearMovesModel(nn.Module):
 
     def forward(self, x):
         (board, sf_eval, moves) = x
-        # print(moves)
-        # inputs = moves
         logits = self.linear(moves).squeeze(dim=1)
         return logits
 
@@ -75,9 +73,6 @@ class NeuralNet(nn.Module):
 
     def forward(self, x):
         (board, sf_eval, moves) = x
-
-        # inputs_board = board
-        # inputs_moves = torch.stack([(moves[feature].float()) for feature in moves]).transpose(0, 2).transpose(0, 1)
 
         hidden = self.activation(self.linear_board(board) + self.linear_moves(moves))
         logits = self.linear_output(hidden).squeeze(dim=1)

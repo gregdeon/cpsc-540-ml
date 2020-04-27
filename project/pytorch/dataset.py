@@ -84,26 +84,6 @@ class ChessDataset(Dataset):
             'move': self.move_feature_names,
         }
 
-def get_dataloader(csv_path):
-    """
-    Set up a dataloader for a chess dataset.
-
-    TODO: add config?
-    Might help to add shuffle=True...
-    """
-    dataset = ChessDataset(csv_path)
-    dataloader = DataLoader(dataset, batch_size=1)
-    return dataloader
-
-
-# TODO: using a DataLoader is hard because our move lists have varying lengths...
-# Need a custom collate function, like this, but it also needs to convert variables to tensors...
-# Until we figure this out, need a batch size of 1
-def collate_boards(batch):
-    x = [b[0] for b in batch]
-    y = [b[1] for b in batch]
-    return (x, y)
-
 if __name__ == "__main__":
     # Sample code for loading and reading one individual board
     print('loading...')
@@ -118,16 +98,6 @@ if __name__ == "__main__":
     (board, stockfish_eval, moves), label = chess_dataset[2]
     print(board)
 
-    # Example of iterating through dataset
-    # for (i, ((board, sf_eval, moves), label)) in enumerate(chess_dataset):
-    #     print(i, len(moves['move_stockfish_eval']), max(moves['move_stockfish_eval']))
-
-    # dl = DataLoader(chess_dataset, batch_size=1) #, collate_fn=collate_boards)
-    # (board, sf_eval, moves), label  = next(iter(dl))
-    # print(board)
-    # print(moves)
-    # print(label)
-
     print('Iterating through dataset...')
     for ((board, sf_eval, moves), label) in chess_dataset:
         pass
@@ -135,6 +105,10 @@ if __name__ == "__main__":
     print('Columns:')
     print(chess_dataset.get_column_names())
 
-    # print('Iterating through dataloader...')
-    # for ((board, sf_eval, moves), label) in dl:
-    #     pass
+    print('Caching datasets...')
+    train_dataset = ChessDataset('../data/train.csv', verbose=True)
+    torch.save(train_dataset, '../data/train_cached.pt')
+    val_dataset   = ChessDataset('../data/val.csv'  , verbose=True)
+    torch.save(val_dataset  , '../data/val_cached.pt')
+    test_dataset  = ChessDataset('../data/test.csv' , verbose=True)
+    torch.save(test_dataset , '../data/test_cached.pt')
