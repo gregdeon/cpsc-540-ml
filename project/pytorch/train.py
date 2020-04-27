@@ -2,6 +2,7 @@ import argparse
 from tqdm import tqdm
 import numpy as np
 import os.path
+import functools
 
 import torch
 import torch.nn as nn
@@ -9,7 +10,7 @@ import torch.optim as optim
  
 from dataset import ChessDataset
 from models import build_model
-from evaluate import evaluate, accuracy, nll
+from evaluate import evaluate, num_correct, nll
 
 def save_dict_to_json(d, json_path):
     """Saves dict of floats in json file.
@@ -23,13 +24,15 @@ def save_dict_to_json(d, json_path):
         d = {k: float(v) for k, v in d.items()}
         json.dump(d, f, indent=4)
 
-def save_checkpoint(path, model, optimizer, best_loss, epochs):
+def save_checkpoint(path, model, optimizer, train_losses, validation_losses, best_loss, epochs):
     """
     Save the current training state in a checkpoint file
     """
     torch.save({
         'model_state': model.state_dict(),
         'optimizer_state': optimizer.state_dict(),
+        'train_losses': train_losses,
+        'validation_losses': validation_losses,
         'best_loss': best_loss,
         'epochs': epochs,
     }, path)
@@ -43,7 +46,7 @@ def load_checkpoint(path, model, optimizer):
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state'])
     optimizer.load_state_dict(checkpoint['optimizer_state'])
-    return (checkpoint['best_loss'], checkpoint['epochs'])
+    return (checkpoint['train_losses'], checkpoint['validation_losses'], checkpoint['best_loss'], checkpoint['epochs'])
 
 def train_epoch(model, loss_fn, optimizer, data, batch_size):
     """
@@ -97,24 +100,27 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
+    epoch = 0
+    train_losses = []
+    validation_losses = []
     best_validation_loss = np.inf
     
     # Restart from existing checkpoint, if provided
     if restore_checkpoint is not None:
         restore_path = os.path.join(model_dir, 'checkpoint-%d.pt' % restore_checkpoint)
         print("Restoring parameters from %s..." % (restore_path))
-        best_validation_loss, epoch = load_checkpoint(restore_path, model, optimizer)
+        train_losses, validation_losses, best_validation_loss, epoch = load_checkpoint(restore_path, model, optimizer)
 
-    else:
-        epoch = 0
 
     # Train
+    torch.save(model, os.path.join(model_dir, '%d.pt' % (epoch)))
     while epoch < num_epochs:
         print('Starting epoch %d/%d' % (epoch+1, num_epochs))
 
         # Train for one epoch
         print('Training...')
         training_loss = train_epoch(model, loss_fn, optimizer, train_data, batch_size)
+        train_losses.append(float(training_loss))
         print('Training loss: %.4f' % training_loss)
         print()
 
@@ -122,11 +128,14 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
         print('Validating...')
         validation_metrics = {
             'loss': nll,
-            'accuracy': accuracy,
+            'num_correct': num_correct,
+            # 'top_3': functools.partial(top_k, k=3),
+            # 'top_5': functools.partial(top_k, k=5),
         }
         validation_results = evaluate(model, validation_data, validation_metrics)
         for metric in validation_results:
             print('- %s: %.4f' % (metric, validation_results[metric]))
+            print('  (%.4f / instance)' % (validation_results[metric] / len(validation_data)))
         print()
 
         # Save model
@@ -134,6 +143,7 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
 
         # Also save model as best if this beats validation record
         validation_loss = validation_results['loss']
+        validation_losses.append(float(validation_loss))
         if validation_loss < best_validation_loss:
             print('Record validation loss: %.4f (beats %.4f)' % (validation_loss, best_validation_loss))
             print()
@@ -141,7 +151,7 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
             torch.save(model, os.path.join(model_dir, 'best.pt'))
 
         # Save checkpoint
-        save_checkpoint(os.path.join(model_dir, 'checkpoint-%d.pt' % (epoch+1)), model, optimizer, best_validation_loss, epoch+1)
+        save_checkpoint(os.path.join(model_dir, 'checkpoint-%d.pt' % (epoch+1)), model, optimizer, train_losses, validation_losses, best_validation_loss, epoch+1)
 
         epoch += 1
 

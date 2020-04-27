@@ -5,6 +5,7 @@ Functions for evaluating model performance.
 import argparse
 import numpy as np
 from tqdm import tqdm
+import functools
 
 import torch
 import torch.nn as nn
@@ -12,7 +13,7 @@ import torch.nn as nn
 from dataset import ChessDataset
 from models import build_model
 
-def accuracy(outputs, labels):
+def num_correct(outputs, labels):
     """
     Compute the fraction of examples that the model gets correct.
     Predicted labels are max logit outputs, breaking ties randomly.
@@ -23,7 +24,13 @@ def accuracy(outputs, labels):
     predicted_labels = [(output == output.max()).float() for output in outputs]
     num_predicted = [sum(predicted) for predicted in predicted_labels]
     correct = [predicted_labels[i][labels[i]] / num_predicted[i] for i in range(num_examples)]
-    return float(sum(correct)) / num_examples
+    return float(sum(correct))
+
+def top_k(outputs, labels, k):
+    num_examples = len(outputs)
+    prediction_orders = [output.argsort(descending=True).argsort() for output in outputs]
+    correct = [prediction_orders[i][labels[i]] < k for i in range(num_examples)]
+    return float(sum(correct))
 
 def log_likelihood(outputs, labels):
     """
@@ -93,7 +100,10 @@ if __name__ == "__main__":
     
     print('Evaluating...')
     metrics = {
-        'accuracy': accuracy,
+        'num_correct': num_correct,
+        'top_1': functools.partial(top_k, k=1),
+        'top_3': functools.partial(top_k, k=3),
+        'top_5': functools.partial(top_k, k=5),
         'log_likelihood': log_likelihood,
     }
     results = evaluate(model, dataset, metrics)

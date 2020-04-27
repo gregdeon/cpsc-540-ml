@@ -26,6 +26,19 @@ class PreferBackwardMoves(nn.Module):
         (board, sf_eval, moves) = x
         return -torch.FloatTensor(1.0*moves[:, self.move_dy_index])
 
+class PureRandomModel(nn.Module):
+    """
+    Simple baseline. Output uniform distribution over legal moves.
+    """
+    def __init__(self):
+        super(PureRandomModel, self).__init__()
+        self.dummy_param = nn.Parameter(torch.tensor([0.0]))
+        
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+        return 0.0 * moves[:, 0]
+
+
 class StockfishScoreModel(nn.Module):
     """
     Simple model only based on Stockfish analysis. 
@@ -58,15 +71,12 @@ class LinearMovesModel(nn.Module):
         logits = self.linear(moves).squeeze(dim=1)
         return logits
 
-class NeuralNet(nn.Module):
+class NeuralNetMoves(nn.Module):
     """
-    Deeper neural net.
-
-    TODO: document...
+    2-layer neural net, only considering move features
     """
-    def __init__(self, num_features_board, num_features_moves, hidden_units, activation):
-        super(NeuralNet, self).__init__()
-        self.linear_board = nn.Linear(num_features_board, hidden_units)
+    def __init__(self, num_features_moves, hidden_units, activation):
+        super(NeuralNetMoves, self).__init__()
         self.linear_moves = nn.Linear(num_features_moves, hidden_units)
         self.linear_output = nn.Linear(hidden_units, 1)
         self.activation = activation
@@ -74,8 +84,30 @@ class NeuralNet(nn.Module):
     def forward(self, x):
         (board, sf_eval, moves) = x
 
-        hidden = self.activation(self.linear_board(board) + self.linear_moves(moves))
+        hidden = self.activation(self.linear_moves(moves))
         logits = self.linear_output(hidden).squeeze(dim=1)
+        return logits
+
+class NeuralNetBoard(nn.Module):
+    """
+    Deeper neural net.
+
+    TODO: document...
+    """
+    def __init__(self, num_features_board, num_features_moves, hidden_units_1, hidden_units_2, activation):
+        super(NeuralNetBoard, self).__init__()
+        self.linear_board = nn.Linear(num_features_board, hidden_units_1)
+        self.linear_moves = nn.Linear(num_features_moves, hidden_units_1)
+        self.linear_hidden = nn.Linear(hidden_units_1, hidden_units_2)
+        self.linear_output = nn.Linear(hidden_units_2, 1)
+        self.activation = activation
+
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+
+        hidden_1 = self.activation(self.linear_board(board) + self.linear_moves(moves))
+        hidden_2 = self.activation(self.linear_hidden(hidden_1))
+        logits = self.linear_output(hidden_2).squeeze(dim=1)
         return logits
 
 def build_model(model_type, feature_names):
@@ -87,7 +119,7 @@ def build_model(model_type, feature_names):
     num_move_features  = len(feature_names['move'])
 
     if model_type == 'random':
-        model = 'TODO'
+        model = PureRandomModel()
 
     elif model_type == 'stockfish_score':
         stockfish_score_index = feature_names['move'].index('move_stockfish_eval')
@@ -96,9 +128,12 @@ def build_model(model_type, feature_names):
     elif model_type == 'linear_moves':
         model = LinearMovesModel(num_move_features)
 
+    elif model_type == 'nn_moves':
+        model = NeuralNetMoves(num_move_features, 16, nn.ReLU())
+
     elif model_type == 'nn_board':
-        # TODO: read hidden layer size from 
-        model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
+        # TODO: read hidden layer size from config file?
+        model = NeuralNetBoard(num_board_features, num_move_features, 32, 16, nn.ReLU())
 
     else: 
         raise ValueError('Unrecognized model type %s' % model_type)
@@ -126,7 +161,7 @@ if __name__ == "__main__":
     print(model_3((board, sf_eval, moves)))
 
     num_board_features = len(feature_names['board'])
-    model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
+    model = NeuralNet(num_board_features, num_move_features, 2, nn.ReLU())
     print(model((board, sf_eval, moves)))
     # print(output)
     # print(torch.argmax(output))
