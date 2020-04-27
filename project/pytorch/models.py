@@ -78,7 +78,32 @@ class NeuralNet(nn.Module):
         logits = self.linear_output(hidden).squeeze(dim=1)
         return logits
 
+def build_model(model_type, feature_names):
+    """
+    Helper function: create a model object
+    """
 
+    num_board_features = len(feature_names['board'])
+    num_move_features  = len(feature_names['move'])
+
+    if model_type == 'random':
+        model = 'TODO'
+
+    elif model_type == 'stockfish_score':
+        stockfish_score_index = feature_names['move'].index('move_stockfish_eval')
+        model = StockfishScoreModel(stockfish_score_idx=stockfish_score_index)
+
+    elif model_type == 'linear_moves':
+        model = LinearMovesModel(num_move_features)
+
+    elif model_type == 'nn_board':
+        # TODO: read hidden layer size from 
+        model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
+
+    else: 
+        raise ValueError('Unrecognized model type %s' % model_type)
+
+    return model
 
 if __name__ == "__main__":
     print('loading...')

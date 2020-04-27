@@ -1,16 +1,16 @@
 """
 Functions for evaluating model performance.
-
-TODO: make command line interface.
 """
 
-from models import PreferBackwardMoves, StockfishScoreModel
-
+import argparse
 import numpy as np
 from tqdm import tqdm
 
 import torch
 import torch.nn as nn
+
+from dataset import ChessDataset
+from models import build_model
 
 def accuracy(outputs, labels):
     """
@@ -68,20 +68,36 @@ def evaluate(model, dataset, metrics):
 
     return results
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--model_path',                                                                 help='(string) Path to model file')
+parser.add_argument('--data_source', choices=['train', 'val', 'test'], default='val',               help='(string) Dataset to evaluate against')
+parser.add_argument('--train_data',                                    default='../data/train.csv', help='(string) Path to training set CSV')
+parser.add_argument('--validation_data',                               default='../data/val.csv',   help='(string) Path to validation set CSV')
+parser.add_argument('--test_data',                                     default='../data/test.csv',  help='(string) Path to test set CSV')
+parser.add_argument('--load_cached',                                   action='store_true',         help='Load cached versions of the training and validation datasets')
 
 if __name__ == "__main__":
-    print('Loading...')
-    from dataset import ChessDataset
-    dataset = ChessDataset('../data/val.csv')
-    feature_names = dataset.get_column_names()
+    args = parser.parse_args()
 
-    model = StockfishScoreModel()
-    # model = PreferBackwardMoves()
+    print('Loading data...')
+    if args.load_cached:
+        # TODO: don't hard-code these
+        data_sources = {'train': '../data/train_cached.pt', 'val': '../data/val_cached.pt', 'test': '../data/test_cached.pt'}
+        dataset = torch.load(data_sources[args.data_source])
+    else:
+        data_sources = {'train': args.train_data, 'val': args.validation_data, 'test': args.test_data}
+        dataset = ChessDataset(data_sources[args.data_source])
+
+    print('Loading model...')
+    model = torch.load(args.model_path)
+    
+    print('Evaluating...')
     metrics = {
         'accuracy': accuracy,
         'log_likelihood': log_likelihood,
     }
-    
-    print('Evaluating...')
     results = evaluate(model, dataset, metrics)
-    print(results)
+    print('Results:')
+    for metric in results:
+        print('- %s: %.4f' % (metric, results[metric]))
+        print('  (%.4f / instance)' % (results[metric] / len(dataset)))

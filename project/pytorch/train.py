@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
  
 from dataset import ChessDataset
-from models import StockfishScoreModel, LinearMovesModel, NeuralNet
+from models import build_model
 from evaluate import evaluate, accuracy, nll
 
 def save_dict_to_json(d, json_path):
@@ -130,7 +130,7 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
         print()
 
         # Save model
-        torch.save(model.state_dict(), os.path.join(model_dir, '%d.pt' % (epoch+1)))
+        torch.save(model, os.path.join(model_dir, '%d.pt' % (epoch+1)))
 
         # Also save model as best if this beats validation record
         validation_loss = validation_results['loss']
@@ -138,43 +138,17 @@ def train(model, loss_fn, optimizer, train_data, validation_data, num_epochs, ba
             print('Record validation loss: %.4f (beats %.4f)' % (validation_loss, best_validation_loss))
             print()
             best_validation_loss = validation_loss
-            torch.save(model.state_dict(), os.path.join(model_dir, 'best.pt'))
+            torch.save(model, os.path.join(model_dir, 'best.pt'))
 
         # Save checkpoint
         save_checkpoint(os.path.join(model_dir, 'checkpoint-%d.pt' % (epoch+1)), model, optimizer, best_validation_loss, epoch+1)
 
         epoch += 1
 
-
-def build_model(model_type, feature_names):
-    """
-    Create a model object.
-    """
-
-    # TODO: build model of model_type
-    num_board_features = len(feature_names['board'])
-    num_move_features  = len(feature_names['move'])
-
-    if model_type == 'random':
-        model = 'TODO'
-
-    elif model_type == 'stockfish_score':
-        stockfish_score_index = feature_names['move'].index('move_stockfish_eval')
-        model = StockfishScoreModel(stockfish_score_idx=stockfish_score_index)
-
-    elif model_type == 'linear_moves':
-        model = LinearMovesModel(num_move_features)
-
-    elif model_type == 'nn_board':
-        # TODO: read hidden layer size from 
-        model = NeuralNet(num_board_features, num_move_features, 8, nn.ReLU())
-
-    return model
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--train_data',                default='../data/train.csv', help='(string) Path to training set CSV')
 parser.add_argument('--validation_data',           default='../data/val.csv',   help='(string) Path to validation set CSV')
-parser.add_argument('--load_cached',   action='store_true',                     help='Load cached versions of the training and validation')
+parser.add_argument('--load_cached',               action='store_true',         help='Load cached versions of the training and validation datasets')
 parser.add_argument('--model_type',                                             help='(string) Name of model to train')
 parser.add_argument('--model_dir',                 default='models/test',       help='(string) Path to store models and checkpoints')
 parser.add_argument('--epochs',        type=int,   default=10,                  help='(int) Number of passes to make through the training set')
