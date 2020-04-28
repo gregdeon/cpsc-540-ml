@@ -164,6 +164,7 @@ parser.add_argument('--model_dir',                 default='models/test',       
 parser.add_argument('--epochs',        type=int,   default=10,                  help='(int) Number of passes to make through the training set')
 parser.add_argument('--batch_size',    type=int,   default=16,                  help='(int) Number of examples to evaluate for each optimizer step')
 parser.add_argument('--learning_rate', type=float, default=1e-4,                help='(float) Optimizer learning rate')
+parser.add_argument('--weight_decay',  type=float, default=1e-2,                help='(float) Optimizer weight decay')
 parser.add_argument('--checkpoint',    type=int,   default=None,                help='(int) Checkpoint number to restart training from')
 
 if __name__ == "__main__":
@@ -174,13 +175,13 @@ if __name__ == "__main__":
     if args.load_cached:
         train_data = torch.load('../data/train_cached.pt')
     else:
-        train_data = ChessDataset(args.train_data)
+        train_data = ChessDataset(args.train_data, args.train_data)
     
     print('- Validation...')
     if args.load_cached:
         validation_data = torch.load('../data/val_cached.pt')
     else:
-        validation_data = ChessDataset(args.validation_data)
+        validation_data = ChessDataset(args.validation_data, args.train_data)
 
     print('Setting up models...')    
     feature_names = train_data.get_column_names()
@@ -188,7 +189,7 @@ if __name__ == "__main__":
     model_dir = 'models/%s' % args.model_type
 
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
+    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     train(
         model, 

@@ -48,6 +48,20 @@ def nll(outputs, labels):
     """
     return -log_likelihood(outputs, labels)
 
+def plot_distribution(outputs, labels):
+    softmax = nn.Softmax(dim=0)
+    probabilities = [softmax(output) for output in outputs]
+    p_class = [probabilities[i][labels[i]] for i in range(len(outputs))]
+
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.hist(p_class, bins=np.geomspace(1e-5, 1e0, 16), rwidth=0.8, zorder=10)
+    plt.xscale('log')
+    plt.show()
+
+    # Dummy value
+    return 0
+
 def evaluate(model, dataset, metrics):
     """
     Evaluate models on dataset and summarize with a number of metrics
@@ -93,7 +107,7 @@ if __name__ == "__main__":
         dataset = torch.load(data_sources[args.data_source])
     else:
         data_sources = {'train': args.train_data, 'val': args.validation_data, 'test': args.test_data}
-        dataset = ChessDataset(data_sources[args.data_source])
+        dataset = ChessDataset(data_sources[args.data_source], data_sources['train'])
 
     print('Loading model...')
     model = torch.load(args.model_path)
@@ -101,10 +115,13 @@ if __name__ == "__main__":
     print('Evaluating...')
     metrics = {
         'num_correct': num_correct,
-        'top_1': functools.partial(top_k, k=1),
-        'top_3': functools.partial(top_k, k=3),
-        'top_5': functools.partial(top_k, k=5),
+        'top_1' : functools.partial(top_k, k=1),
+        'top_3' : functools.partial(top_k, k=3),
+        'top_5' : functools.partial(top_k, k=5),
+        'top_10': functools.partial(top_k, k=10),
+        'top_20': functools.partial(top_k, k=20),
         'log_likelihood': log_likelihood,
+        # 'plot': plot_distribution,
     }
     results = evaluate(model, dataset, metrics)
     print('Results:')
