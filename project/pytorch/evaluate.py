@@ -62,6 +62,10 @@ def plot_distribution(outputs, labels):
     # Dummy value
     return 0
 
+def list_probabilities(outputs, labels):
+    softmax = nn.Softmax(dim=0)
+    probabilities = [softmax(output) for output in outputs]
+
 def evaluate(model, dataset, metrics):
     """
     Evaluate models on dataset and summarize with a number of metrics

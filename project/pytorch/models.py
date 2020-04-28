@@ -75,17 +75,20 @@ class NeuralNetMoves(nn.Module):
     """
     2-layer neural net, only considering move features
     """
-    def __init__(self, num_features_moves, hidden_units, activation):
+    def __init__(self, num_features_moves, hidden_units_1, hidden_units_2, activation):
         super(NeuralNetMoves, self).__init__()
-        self.linear_moves = nn.Linear(num_features_moves, hidden_units)
-        self.linear_output = nn.Linear(hidden_units, 1)
+        self.linear_moves = nn.Linear(num_features_moves, hidden_units_1)
+        self.linear_hidden = nn.Linear(hidden_units_1, hidden_units_2)
+        self.linear_output = nn.Linear(hidden_units_2, 1)
         self.activation = activation
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
         (board, sf_eval, moves) = x
 
-        hidden = self.activation(self.linear_moves(moves))
-        logits = self.linear_output(hidden).squeeze(dim=1)
+        hidden_1 = self.activation(self.linear_moves(moves))
+        hidden_2 = self.activation(self.linear_hidden(self.dropout(hidden_1)))
+        logits = self.linear_output(hidden_2).squeeze(dim=1)
         return logits
 
 class NeuralNetMovesNoStockfish(nn.Module):
@@ -99,13 +102,14 @@ class NeuralNetMovesNoStockfish(nn.Module):
         self.linear_moves = nn.Linear(num_features, hidden_units)
         self.linear_output = nn.Linear(hidden_units, 1)
         self.activation = activation
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
         (board, sf_eval, moves) = x
 
         inputs = moves[:, self.allowed_features]
         hidden = self.activation(self.linear_moves(inputs))
-        logits = self.linear_output(hidden).squeeze(dim=1)
+        logits = self.linear_output(self.dropout(hidden)).squeeze(dim=1)
         return logits
 
 class NeuralNetBoard(nn.Module):
@@ -119,13 +123,15 @@ class NeuralNetBoard(nn.Module):
         self.linear_hidden = nn.Linear(hidden_units_1, hidden_units_2)
         self.linear_output = nn.Linear(hidden_units_2, 1)
         self.activation = activation
+        self.dropout = nn.Dropout(0.1)
+
 
     def forward(self, x):
         (board, sf_eval, moves) = x
 
         hidden_1 = self.activation(self.linear_board(board) + self.linear_moves(moves))
-        hidden_2 = self.activation(self.linear_hidden(hidden_1))
-        logits = self.linear_output(hidden_2).squeeze(dim=1)
+        hidden_2 = self.activation(self.linear_hidden(self.dropout(hidden_1)))
+        logits = self.linear_output(self.dropout(hidden_2)).squeeze(dim=1)
         return logits
 
 class NeuralNetAll(nn.Module):
@@ -140,13 +146,14 @@ class NeuralNetAll(nn.Module):
         self.linear_hidden = nn.Linear(hidden_units_1, hidden_units_2)
         self.linear_output = nn.Linear(hidden_units_2, 1)
         self.activation = activation
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
         (board, sf_eval, moves) = x
 
         hidden_1 = self.activation(self.linear_board(board) + self.linear_stockfish(sf_eval) + self.linear_moves(moves))
-        hidden_2 = self.activation(self.linear_hidden(hidden_1))
-        logits = self.linear_output(hidden_2).squeeze(dim=1)
+        hidden_2 = self.activation(self.linear_hidden(self.dropout(hidden_1)))
+        logits = self.linear_output(self.dropout(hidden_2)).squeeze(dim=1)
         return logits
 
 class TransformerMoves(nn.Module):
@@ -159,6 +166,50 @@ class TransformerMoves(nn.Module):
         (board, sf_eval, moves) = x
         # print(moves.size)
         hidden = self.transformer(moves.unsqueeze(dim=1))
+        logits = self.linear_output(hidden).squeeze(dim=1).squeeze(dim=1)
+        return logits
+
+class TransformerMovesNoStockfish(nn.Module):
+    def __init__(self, allowed_features, hidden_units):
+        super(TransformerMovesNoStockfish, self).__init__()
+        num_features = len(allowed_features)
+        self.allowed_features = allowed_features
+        self.transformer = nn.TransformerEncoderLayer(num_features, 1, hidden_units)
+        self.linear_output = nn.Linear(num_features, 1)
+
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+        # print(moves.size)
+        hidden = self.transformer(moves[:, self.allowed_features].unsqueeze(dim=1))
+        logits = self.linear_output(hidden).squeeze(dim=1).squeeze(dim=1)
+        return logits
+
+class TransformerBoard(nn.Module):
+    def __init__(self, num_features_board, num_features_moves, hidden_units):
+        super(TransformerBoard, self).__init__()
+        self.transformer = nn.TransformerEncoderLayer(num_features_moves, 1, hidden_units)
+        self.linear_board = nn.Linear(num_features_board, num_features_moves)
+        self.linear_output = nn.Linear(num_features_moves, 1)
+        self.activation = nn.ReLU()
+
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+        hidden = self.transformer(moves.unsqueeze(dim=1)) + self.activation(self.linear_board(board))
+        logits = self.linear_output(hidden).squeeze(dim=1).squeeze(dim=1)
+        return logits
+
+class TransformerAll(nn.Module):
+    def __init__(self, num_features_board, num_features_sf, num_features_moves, hidden_units):
+        super(TransformerAll, self).__init__()
+        self.transformer = nn.TransformerEncoderLayer(num_features_moves, 1, hidden_units)
+        self.linear_board = nn.Linear(num_features_board, num_features_moves)
+        self.linear_sf = nn.Linear(num_features_sf, num_features_moves)
+        self.linear_output = nn.Linear(num_features_moves, 1)
+        self.activation = nn.ReLU()
+
+    def forward(self, x):
+        (board, sf_eval, moves) = x
+        hidden = self.transformer(moves.unsqueeze(dim=1)) + self.activation(self.linear_board(board) + self.linear_sf(sf_eval))
         logits = self.linear_output(hidden).squeeze(dim=1).squeeze(dim=1)
         return logits
 
@@ -201,29 +252,35 @@ def build_model(model_type, feature_names):
         model = LinearMovesModel(num_move_features)
 
     elif model_type == 'nn_moves':
-        model = NeuralNetMoves(num_move_features, 16, nn.ReLU())
+        model = NeuralNetMoves(num_move_features, 32, 16, nn.ReLU())
 
     elif model_type == 'nn_moves_no_stockfish':
         allowed_features = [i for i in range(len(feature_names['move'])) if 'stockfish' not in feature_names['move'][i]]
         model = NeuralNetMovesNoStockfish(allowed_features, 16, nn.ReLU())
 
     elif model_type == 'nn_board':
-        # TODO: read hidden layer size from config file?
-        model = NeuralNetBoard(num_board_features, num_move_features, 48, 24, nn.ReLU())
+        model = NeuralNetBoard(num_board_features, num_move_features, 32, 16, nn.ReLU())
 
     elif model_type == 'nn_all':
         model = NeuralNetAll(num_board_features, num_stockfish_features, num_move_features, 32, 16, nn.ReLU())
 
     elif model_type == 'transformer_moves':
         print(num_move_features)
-        model = TransformerMoves(num_move_features, 2)
+        model = TransformerMoves(num_move_features, 16)
+
+    elif model_type == 'transformer_moves_no_stockfish':
+        allowed_features = [i for i in range(len(feature_names['move'])) if 'stockfish' not in feature_names['move'][i]]
+        model = TransformerMovesNoStockfish(allowed_features, 16)
 
     elif model_type == 'attention_moves':
         print(num_move_features)
         model = AttentionMoves(num_move_features, 32, 16)
 
-    elif model_type == 'attention_board':
-        model = 'TODO'
+    elif model_type == 'transformer_board':
+        model = TransformerBoard(num_board_features, num_move_features, 16)
+
+    elif model_type == 'transformer_all':
+        model = TransformerAll(num_board_features, num_stockfish_features, num_move_features, 16)
 
     else: 
         raise ValueError('Unrecognized model type %s' % model_type)
